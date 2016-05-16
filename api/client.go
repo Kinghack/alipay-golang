@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"crypto/sha1"
 	"time"
+	"strconv"
 )
 
 const (
@@ -293,7 +294,8 @@ func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, e erro
 }
 
 //https://doc.open.alipay.com/doc2/detail.htm?spm=a219a.7629140.0.0.aQc9uV&treeId=59&articleId=103663&docType=1
-func (c *ZhifubaoApiClient) GetMobilePayOrderString(ordId, price, notifyUrl, subject, detail string) (string) {
+func (c *ZhifubaoApiClient) GetMobilePayOrderString(ordId, notifyUrl, subject, detail string, price float64) (string) {
+	priceStr := strconv.FormatFloat(price, 'f', 2, 64)
 	params := map[string]string{
 		"_input_charset": "utf-8",
 		"service" : "mobile.securitypay.pay",
@@ -303,7 +305,7 @@ func (c *ZhifubaoApiClient) GetMobilePayOrderString(ordId, price, notifyUrl, sub
 		"subject": subject,
 		"payment_type": "1",
 		"seller_id": c.Pid,
-		"total_fee": price,
+		"total_fee": priceStr,
 		"body": detail,
 	}
 	array := []string{}
@@ -423,11 +425,13 @@ func (c *ZhifubaoApiClient) QueryOrderByTradeId(tradeId string) (res bool, e err
 	return
 }
 
-//func main() {
-//
-//	client := CreateZhifubaoClient("your pid", "your path to private pem")
-//	//back := client.GetMobilePayOrderString("id", "0.01", "url", "subject", "detail")
+func main() {
 
-//}
+	client := CreateZhifubaoClient("your pid", "/Users/james/Dropbox/HAVE/zhifubao/rsa_private_key.pem")
+	//back := client.GetMobilePayOrderString("id", "0.01", "http://dev.doyouhave.cn", "subject", "detail")
+	client.QueryPayResByOrderId("57343b4fa5f05b39e63d7e98")
+	//client.QueryOrderByOrderId("57343b4fa5f05b39e63d7e98")
+
+}
 
 

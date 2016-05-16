@@ -323,7 +323,7 @@ func (c *ZhifubaoApiClient) GetMobilePayOrderString(ordId, notifyUrl, subject, d
 	secret := url.QueryEscape(base64.StdEncoding.EncodeToString(signed))
 	log.Println("afefef")
 	log.Println(strings.Join(array, "&") + "&sign=\"" + secret + "\"&sign_type=\"RSA\"")
-	return strings.Join(array, "&") + "&sign=" + secret + "&sign_type=\"RSA\""
+	return strings.Join(array, "&") + "&sign=\"" + secret + "\"&sign_type=\"RSA\""
 }
 
 func (c *ZhifubaoApiClient) PayByOrderId(ordId string) (res bool, e error) {

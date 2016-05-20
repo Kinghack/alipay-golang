@@ -17,20 +17,52 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"crypto/sha1"
-	"time"
+	//"time"
 	"strconv"
+	"encoding/xml"
 )
 
 const (
 	apigate = "https://openapi.alipay.com/gateway.do"
+	mapigate = "https://mapi.alipay.com/gateway.do"
+	//for single query
+	zhifubaopubkey =  `MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCnxj/9qwVfgoUh/y2W89L6BkRAFljhNhgPdyPuBV64bfQNN1PjbCzkIM6qRdKBoLPXmKKMiFYnkd6rAoprih3/PrQEB/VsW8OoM8fxn67UDYuyBTqA23MML9q1+ilIZwBC2AQ2UBVOrFXfFl75p6/B5KsiNG9zpgmLCUYuLkxpLQIDAQAB`
 )
 
 //http://stackoverflow.com/questions/20655702/signing-and-decoding-with-rsa-sha-in-go
 // loadPrivateKey loads an parses a PEM encoded private key file.
-func loadPublicKey(path string) (Unsigner, error) {
+func loadZhifubaoKey() (Unsigner, error) {
 	return parsePublicKey([]byte(`-----BEGIN PUBLIC KEY-----
-your public key here
 -----END PUBLIC KEY-----`))
+}
+
+func VerifyZhifubaoRes(params, sig string) (res bool, e error) {
+	key, err := base64.StdEncoding.DecodeString(zhifubaopubkey)
+	if err != nil {
+		e = err
+		return
+	}
+	re, err := x509.ParsePKIXPublicKey(key)
+	pub := re.(*rsa.PublicKey)
+	if err != nil {
+		e = err
+		return
+	}
+	h := sha1.New()
+	h.Write([]byte(params))
+	digest := h.Sum(nil)
+	ds, err := base64.StdEncoding.DecodeString(sig)
+	if err != nil {
+		e = err
+		return
+	}
+	err = rsa.VerifyPKCS1v15(pub, crypto.SHA1, digest, ds)
+	if err == nil {
+		res = true
+	} else {
+		e = err
+	}
+	return
 }
 
 // parsePublicKey parses a PEM encoded private key.
@@ -62,10 +94,10 @@ func loadPrivateKey(path string) (Signer, error) {
 		return nil, e
 	}
 	return parsePrivateKey(pem)
-//	return parsePrivateKey([]byte(`-----BEGIN RSA PRIVATE KEY-----
-//	your private pem here
-//	bababababaab
-//-----END RSA PRIVATE KEY-----`))
+	//	return parsePrivateKey([]byte(`-----BEGIN RSA PRIVATE KEY-----
+	//	your private pem here
+	//	bababababaab
+	//-----END RSA PRIVATE KEY-----`))
 }
 
 // parsePublicKey parses a PEM encoded private key.
@@ -176,7 +208,7 @@ func CreateZhifubaoClient(pid, pemPath string) (client *ZhifubaoApiClient) {
 }
 
 func (c *ZhifubaoApiClient) sign(params map[string]string) (secret string) {
-	params["timestamp"] = time.Now().Format("2006-01-02 15:04:05")
+	//params["timestamp"] = time.Now().Format("2006-01-02 15:04:05")
 	keys := []string{}
 	for k, _ := range params {
 		keys = append(keys, k)
@@ -238,59 +270,94 @@ func (c *ZhifubaoApiClient) CreateOrderByOrderId(ordId string) (res bool, e erro
 	return
 }
 
-func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, e error) {
+func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, trackId string, e error) {
 	params := map[string]string{
 		"_input_charset": "utf-8",
 		"service" : "single_trade_query",
 		"partner" : c.Pid,
 		"out_trade_no": ordId,
 	}
-
-	params["sign"] = c.sign(params)
-	form := url.Values{}
-	for k, v := range params {
-		form.Add(k, v)
+	keys := []string{}
+	for k, _ := range params {
+		keys = append(keys, k)
 	}
-	req, err := http.NewRequest("POST", apigate, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	sort.Strings(keys)
+	requestStr := []string{}
+	for _, k := range keys {
+		requestStr = append(requestStr, k + "=" + params[k])
+	}
+	signer, err := loadPrivateKey(c.PrivatePemPath)
+	if err != nil {
+		return
+	}
+	signed, err := signer.Sign([]byte(strings.Join(requestStr, "&")))
+	requestStr = append(requestStr, "sign=" + url.QueryEscape(base64.StdEncoding.EncodeToString(signed)))
+	requestStr = append(requestStr, "sign_type=RSA")
+	resp, err := http.Get(mapigate + "?" + (strings.Join(requestStr, "&")))
 	defer resp.Body.Close()
 	if err != nil {
-		log.Println("a")
 		log.Println(err)
+		e = err
 		return
 	}
-	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("b")
 		log.Println(err)
 		return
 	}
-	var dat map[string]interface{}
-	json.Unmarshal(body, &dat)
-	log.Println("c")
-	log.Println(dat)
-	//log.Println(dat["alipay_trade_query_response"].(map[string]interface{})["sub_msg"])
-	//log.Println(dat["alipay_pass_instance_update_response"].(map[string]interface{})["sub_msg"])
+	decoder := xml.NewDecoder(resp.Body)
+	start := false
+	sign := false
+	var nodename string
+	//parseRes := []string{}
+	parseRes := map[string]string{}
+	secret := ""
+	for t, err := decoder.Token(); err == nil; t, err = decoder.Token() {
+		switch token := t.(type) {
+		case xml.StartElement:
+			name := token.Name.Local
+			if start {
+				nodename = name
+			}
+			if name == "trade" {
+				start = true
+			} else if name == "sign" {
+				sign = true
+			}
+		case xml.EndElement:
+			if token.Name.Local == "trade" {
+				start = false
+			}
+			break
+		case xml.CharData:
+			content := string([]byte(token))
+			if start {
+				//parseRes = append(parseRes, nodename + "=" + content)
+				parseRes[nodename] = content
+			} else if sign {
+				secret = content
+				sign = false
+			}
+		default:
+			continue
+		}
+	}
+	keys = []string{}
+	for k, _ := range parseRes {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	requestStr = []string{}
+	for _, k := range keys {
+		requestStr = append(requestStr, k + "=" + parseRes[k])
+	}
+	verifyRes, err := VerifyZhifubaoRes(strings.Join(requestStr, "&"), secret)
+	if !verifyRes {
+		e = err
+		return
+	}
+	trackId = parseRes["trade_no"]
+	res = ((parseRes["trade_status"] == "TRADE_SUCCESS") || (parseRes["trade_status"] == "TRADE_FINISHED"))
 	return
-	//array := []string{}
-	//for k, v := range params {
-	//	array = append(array, k + "=" + ("\"" + v + "\""))
-	//}
-	//signer, err := loadPrivateKey(c.PrivatePemPath)
-	//if err != nil {
-	//	return ""
-	//}
-	//signed, err := signer.Sign([]byte(strings.Join(array, "&")))
-	//if err != nil {
-	//	fmt.Errorf("could not sign request: %v", err)
-	//}
-	//secret := url.QueryEscape(base64.StdEncoding.EncodeToString(signed))
-	//log.Println("afefef")
-	//log.Println(strings.Join(array, "&") + "&sign=\"" + secret + "\"&sign_type=\"RSA\"")
-	//return strings.Join(array, "&") + "&sign=" + secret + "&sign_type=\"RSA\""
-	//return
 }
 
 //https://doc.open.alipay.com/doc2/detail.htm?spm=a219a.7629140.0.0.aQc9uV&treeId=59&articleId=103663&docType=1
@@ -429,7 +496,8 @@ func main() {
 
 	client := CreateZhifubaoClient("your pid", "/Users/james/Dropbox/HAVE/zhifubao/rsa_private_key.pem")
 	//back := client.GetMobilePayOrderString("id", "0.01", "http://dev.doyouhave.cn", "subject", "detail")
-	client.QueryPayResByOrderId("57343b4fa5f05b39e63d7e98")
+	a, b, c := client.QueryPayResByOrderId("57343b4fa5f05b39e63d7e98")
+	log.Println(a, b, c)
 	//client.QueryOrderByOrderId("57343b4fa5f05b39e63d7e98")
 
 }

@@ -3,9 +3,9 @@ package alipay
 import (
 	"log"
 	"sort"
+	mrand "math/rand"
 	"strings"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -20,6 +20,8 @@ import (
 	//"time"
 	"strconv"
 	"encoding/xml"
+	"time"
+	"crypto/rand"
 )
 
 const (
@@ -277,23 +279,8 @@ func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, trackI
 		"partner" : c.Pid,
 		"out_trade_no": ordId,
 	}
-	keys := []string{}
-	for k, _ := range params {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	requestStr := []string{}
-	for _, k := range keys {
-		requestStr = append(requestStr, k + "=" + params[k])
-	}
-	signer, err := loadPrivateKey(c.PrivatePemPath)
-	if err != nil {
-		return
-	}
-	signed, err := signer.Sign([]byte(strings.Join(requestStr, "&")))
-	requestStr = append(requestStr, "sign=" + url.QueryEscape(base64.StdEncoding.EncodeToString(signed)))
-	requestStr = append(requestStr, "sign_type=RSA")
-	resp, err := http.Get(mapigate + "?" + (strings.Join(requestStr, "&")))
+	apiParams := c.signOfOneMethod(params)
+	resp, err := http.Get(mapigate + "?" + apiParams)
 	defer resp.Body.Close()
 	if err != nil {
 		log.Println(err)
@@ -341,12 +328,12 @@ func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, trackI
 			continue
 		}
 	}
-	keys = []string{}
+	keys := []string{}
 	for k, _ := range parseRes {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	requestStr = []string{}
+	requestStr := []string{}
 	for _, k := range keys {
 		requestStr = append(requestStr, k + "=" + parseRes[k])
 	}
@@ -388,9 +375,45 @@ func (c *ZhifubaoApiClient) GetMobilePayOrderString(ordId, notifyUrl, subject, d
 		fmt.Errorf("could not sign request: %v", err)
 	}
 	secret := url.QueryEscape(base64.StdEncoding.EncodeToString(signed))
-	log.Println("afefef")
-	log.Println(strings.Join(array, "&") + "&sign=\"" + secret + "\"&sign_type=\"RSA\"")
 	return strings.Join(array, "&") + "&sign=\"" + secret + "\"&sign_type=\"RSA\""
+}
+
+func (c *ZhifubaoApiClient) signOfOneMethod(params map[string]string) (request string) {
+	keys := []string{}
+	for k, _ := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	requestStr := []string{}
+	for _, k := range keys {
+		requestStr = append(requestStr, k + "=" + params[k])
+	}
+	signer, err := loadPrivateKey(c.PrivatePemPath)
+	if err != nil {
+		return
+	}
+	signed, err := signer.Sign([]byte(strings.Join(requestStr, "&")))
+	requestStr = append(requestStr, "sign=" + url.QueryEscape(base64.StdEncoding.EncodeToString(signed)))
+	requestStr = append(requestStr, "sign_type=RSA")
+	request = strings.Join(requestStr, "&")
+	return
+}
+
+func (c *ZhifubaoApiClient) GenerateRefundLinkByOrderId(price float64, orderId, sellerEmail, sellerId, explain string) (string, error) {
+	mrand.Seed(time.Now().Unix())
+	random := mrand.Intn(10000-1000) + 1000
+	params := map[string]string{
+		"_input_charset": "utf-8",
+		"service" : "refund_fastpay_by_platform_pwd",
+		"partner" : c.Pid,
+		"seller_email": sellerEmail,
+		"seller_user_id": sellerId,
+		"refund_date": time.Now().Format("2006-01-02 15:04:05"),
+		"batch_no": time.Now().Format("20060102") + strconv.Itoa(random),
+		"batch_num": "1",
+		"detail_data": orderId + "^" + strconv.FormatFloat(price, 'f', 2, 64) + "^" + explain,
+	}
+	return mapigate + "?" + c.signOfOneMethod(params), nil
 }
 
 func (c *ZhifubaoApiClient) PayByOrderId(ordId string) (res bool, e error) {
@@ -462,7 +485,6 @@ func (c *ZhifubaoApiClient) QueryOrderByOrderId(ordId string) (res bool, e error
 	for k, v := range params {
 		form.Add(k, v)
 	}
-	log.Println(form)
 	req, err := http.NewRequest("POST", apigate, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	client := &http.Client{}
@@ -495,10 +517,6 @@ func (c *ZhifubaoApiClient) QueryOrderByTradeId(tradeId string) (res bool, e err
 func main() {
 
 	client := CreateZhifubaoClient("your pid", "/Users/james/Dropbox/HAVE/zhifubao/rsa_private_key.pem")
-	//back := client.GetMobilePayOrderString("id", "0.01", "http://dev.doyouhave.cn", "subject", "detail")
-	a, b, c := client.QueryPayResByOrderId("57343b4fa5f05b39e63d7e98")
-	log.Println(a, b, c)
-	//client.QueryOrderByOrderId("57343b4fa5f05b39e63d7e98")
 
 }
 

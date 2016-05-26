@@ -272,7 +272,7 @@ func (c *ZhifubaoApiClient) CreateOrderByOrderId(ordId string) (res bool, e erro
 	return
 }
 
-func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, trackId string, e error) {
+func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, response map[string]string, e error) {
 	params := map[string]string{
 		"_input_charset": "utf-8",
 		"service":        "single_trade_query",
@@ -342,7 +342,7 @@ func (c *ZhifubaoApiClient) QueryPayResByOrderId(ordId string) (res bool, trackI
 		e = err
 		return
 	}
-	trackId = parseRes["trade_no"]
+	response = parseRes
 	res = ((parseRes["trade_status"] == "TRADE_SUCCESS") || (parseRes["trade_status"] == "TRADE_FINISHED"))
 	return
 }

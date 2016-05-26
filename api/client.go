@@ -516,7 +516,7 @@ func (c *ZhifubaoApiClient) VerifyNotifyCallback(params url.Values) (res bool, e
 			pp[k] = v[0]
 		}
 	}
-	if _, exsit := params["sign"]; !exsit || len(params["sign"]) < 0 {
+	if value, exsit := params["sign"]; !exsit || len(value) < 0 {
 		return
 	}
 	keys := []string{}

@@ -512,8 +512,8 @@ func (c *ZhifubaoApiClient) QueryOrderByOrderId(ordId string) (res bool, e error
 func (c *ZhifubaoApiClient) VerifyNotifyCallback(params url.Values) (res bool, e error) {
 	pp := map[string]string{}
 	for k, v := range params {
-		if k != "sign" && k != "sign_type" {
-			pp[k] = v[0]
+		if value, exist := v[0]; exist && k != "sign" && k != "sign_type" {
+			pp[k] = value
 		}
 	}
 	keys := []string{}
@@ -525,7 +525,12 @@ func (c *ZhifubaoApiClient) VerifyNotifyCallback(params url.Values) (res bool, e
 	for _, k := range keys {
 		requestStr = append(requestStr, k+"="+pp[k])
 	}
-	return VerifyZhifubaoRes(strings.Join(requestStr, "&"), params["sign"][0])
+	sign, exist := params["sign"][0]
+	if !exist {
+		return
+	} else {
+		return VerifyZhifubaoRes(strings.Join(requestStr, "&"), sign)
+	}
 }
 
 func (c *ZhifubaoApiClient) QueryOrderByTradeId(tradeId string) (res bool, e error) {

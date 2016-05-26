@@ -509,13 +509,29 @@ func (c *ZhifubaoApiClient) QueryOrderByOrderId(ordId string) (res bool, e error
 	//log.Println(dat["alipay_pass_instance_update_response"].(map[string]interface{})["sub_msg"])
 	return
 }
+func (c *ZhifubaoApiClient) VerifyNotifyCallback(params url.Values) (res bool, e error) {
+	pp := map[string]string{}
+	for k, v := range params {
+		if k != "sign" && k != "sign_type" {
+			pp[k] = v[0]
+		}
+	}
+	keys := []string{}
+	for k, _ := range pp {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	requestStr := []string{}
+	for _, k := range keys {
+		requestStr = append(requestStr, k+"="+pp[k])
+	}
+	return VerifyZhifubaoRes(strings.Join(requestStr, "&"), params["sign"][0])
+}
 
 func (c *ZhifubaoApiClient) QueryOrderByTradeId(tradeId string) (res bool, e error) {
 	return
 }
 
 //func main() {
-//
 //	client := CreateZhifubaoClient("your pid", "/Users/james/Dropbox/HAVE/zhifubao/rsa_private_key.pem")
-//
 //}

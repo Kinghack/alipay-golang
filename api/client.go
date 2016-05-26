@@ -525,7 +525,7 @@ func (c *ZhifubaoApiClient) VerifyNotifyCallback(params url.Values) (res bool, e
 	for _, k := range keys {
 		requestStr = append(requestStr, k+"="+pp[k])
 	}
-	if exsit := params["sign"]; !exsit || len(params["sign"]) < 0 {
+	if _, exsit := params["sign"]; !exsit || len(params["sign"]) < 0 {
 		return
 	} else {
 		return VerifyZhifubaoRes(strings.Join(requestStr, "&"), params["sign"][0])

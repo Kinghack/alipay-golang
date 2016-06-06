@@ -399,7 +399,7 @@ func (c *ZhifubaoApiClient) signOfOneMethod(params map[string]string) (request s
 	return
 }
 
-func (c *ZhifubaoApiClient) GenerateRefundLinkByOrderId(price float64, orderId, sellerEmail, sellerId, explain string) (string, error) {
+func (c *ZhifubaoApiClient) GenerateRefundLinkByOrderId(price float64, orderId, sellerEmail, sellerId, explain, notifyUrl string) (string, error) {
 	mrand.Seed(time.Now().Unix())
 	random := mrand.Intn(10000-1000) + 1000
 	params := map[string]string{
@@ -411,6 +411,7 @@ func (c *ZhifubaoApiClient) GenerateRefundLinkByOrderId(price float64, orderId, 
 		"refund_date":    time.Now().Format("2006-01-02 15:04:05"),
 		"batch_no":       time.Now().Format("20060102") + strconv.Itoa(random),
 		"batch_num":      "1",
+		"notify_url":     notifyUrl,
 		"detail_data":    orderId + "^" + strconv.FormatFloat(price, 'f', 2, 64) + "^" + explain,
 	}
 	return mapigate + "?" + c.signOfOneMethod(params), nil
